@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/store.tsx","./src/types.ts","./src/components/dashboard.tsx","./src/components/goals.tsx","./src/components/health.tsx","./src/components/simulator.tsx","./src/components/transactions.tsx","./src/utils/finance.ts","./src/utils/sanitize.ts"],"version":"5.7.3"}
