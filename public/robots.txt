@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://broke-but-functional-fwed.vercel.app/sitemap.xml
