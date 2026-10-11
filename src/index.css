@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+body {
+  background: #09090b;
+  color: white;
+  font-family: system-ui, -apple-system, sans-serif;
+  margin: 0;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #a855f7, #ec4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-bg {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+}

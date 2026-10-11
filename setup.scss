@@ -1,0 +1,783 @@
+const fs = require('fs');
+const path = require('path');
+
+const files = {
+  'package.json': JSON.stringify({
+    "name": "broke-but-functional",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+      "dev": "vite",
+      "build": "tsc -b && vite build",
+      "preview": "vite preview"
+    },
+    "dependencies": {
+      "framer-motion": "^12.4.7",
+      "lucide-react": "^1.16.0",
+      "react": "^19.0.0",
+      "react-dom": "^19.0.0"
+    },
+    "devDependencies": {
+      "@tailwindcss/vite": "^4.0.0",
+      "@types/react": "^19.0.0",
+      "@types/react-dom": "^19.0.0",
+      "@vitejs/plugin-react": "^4.3.4",
+      "tailwindcss": "^4.0.0",
+      "typescript": "~5.7.2",
+      "vite": "^6.1.0"
+    }
+  }, null, 2),
+
+  'vite.config.ts': `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+});`,
+
+  'index.html': `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Broke But Functional</title>
+  </head>
+  <body class="bg-zinc-950 text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>`,
+
+  'src/main.tsx': `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);`,
+
+  'src/index.css': `@import "tailwindcss";
+
+body {
+  background: #09090b;
+  color: white;
+  font-family: system-ui, -apple-system, sans-serif;
+  margin: 0;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #a855f7, #ec4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gradient-bg {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+}`,
+
+  'src/types.ts': `export interface Transaction {
+  id: string;
+  amount: number;
+  category: string;
+  description: string;
+  day: number;
+  type: 'income' | 'expense';
+}
+
+export interface Commitment {
+  id: string;
+  name: string;
+  amount: number;
+  dueDay: number;
+  paid: boolean;
+  emoji: string;
+}
+
+export interface Subscription {
+  id: string;
+  name: string;
+  amount: number;
+  emoji: string;
+  active: boolean;
+}
+
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  target: number;
+  saved: number;
+  emoji: string;
+}
+
+export interface FinancialSnapshot {
+  remainingBalance: number;
+  dailyAllowance: number;
+  healthScore: number;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  forecast: number;
+}
+
+export interface AppState {
+  budget: number;
+  currentDay: number;
+  transactions: Transaction[];
+  commitments: Commitment[];
+  subscriptions: Subscription[];
+  savingsGoals: SavingsGoal[];
+}
+
+export type AppAction =
+  | { type: 'ADD_TRANSACTION'; payload: Transaction }
+  | { type: 'DELETE_TRANSACTION'; payload: string }
+  | { type: 'ADD_COMMITMENT'; payload: Commitment }
+  | { type: 'TOGGLE_COMMITMENT_PAID'; payload: string }
+  | { type: 'ADD_SUBSCRIPTION'; payload: Subscription }
+  | { type: 'TOGGLE_SUBSCRIPTION'; payload: string }
+  | { type: 'ADD_GOAL'; payload: SavingsGoal }
+  | { type: 'UPDATE_GOAL_SAVED'; payload: { id: string; amount: number } }
+  | { type: 'SET_DAY'; payload: number }
+  | { type: 'RESET' };`,
+
+  'src/utils/sanitize.ts': `export function sanitizeInput(input: string): string {
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .trim()
+    .slice(0, 200);
+}
+
+export function sanitizeAmount(amount: string): number {
+  const parsed = parseFloat(amount);
+  if (isNaN(parsed) || parsed <= 0 || parsed > 1000000) return 0;
+  return Math.round(parsed * 100) / 100;
+}`,
+
+  'src/utils/finance.ts': `import { AppState, FinancialSnapshot } from '../types';
+
+export function getTotalExpenses(state: AppState): number {
+  return state.transactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
+}
+
+export function getTotalIncome(state: AppState): number {
+  return state.transactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
+}
+
+export function getActiveSubscriptionsTotal(state: AppState): number {
+  return state.subscriptions
+    .filter(s => s.active)
+    .reduce((sum, s) => sum + s.amount, 0);
+}
+
+export function getUnpaidCommitmentsTotal(state: AppState): number {
+  return state.commitments
+    .filter(c => !c.paid)
+    .reduce((sum, c) => sum + c.amount, 0);
+}
+
+export function getRemainingBalance(state: AppState): number {
+  return getTotalIncome(state) - getTotalExpenses(state) - getActiveSubscriptionsTotal(state);
+}
+
+export function getRemainingDays(state: AppState): number {
+  return Math.max(1, 30 - state.currentDay);
+}
+
+export function getDailyAllowance(state: AppState): number {
+  const balance = getRemainingBalance(state);
+  const unpaid = getUnpaidCommitmentsTotal(state);
+  return Math.max(0, (balance - unpaid) / getRemainingDays(state));
+}
+
+export function getHealthScore(state: AppState): number {
+  const balance = getRemainingBalance(state);
+  const daily = getDailyAllowance(state);
+  const totalIncome = getTotalIncome(state) || 1;
+  const spentRatio = getTotalExpenses(state) / totalIncome;
+  const expectedRatio = state.currentDay / 30;
+
+  const spendingScore = Math.max(0, Math.min(100, (1 - (spentRatio - expectedRatio)) * 100));
+  const riskScore = Math.min(100, (daily / 400) * 100);
+  const commitmentScore = balance > getUnpaidCommitmentsTotal(state) ? 100 : Math.max(0, (balance / (getUnpaidCommitmentsTotal(state) || 1)) * 100);
+
+  return Math.round(spendingScore * 0.4 + riskScore * 0.3 + commitmentScore * 0.3);
+}
+
+export function getRiskLevel(state: AppState): 'low' | 'medium' | 'high' | 'critical' {
+  const daily = getDailyAllowance(state);
+  const balance = getRemainingBalance(state);
+  if (daily < 50 || balance < 500) return 'critical';
+  if (daily < 150) return 'high';
+  if (daily < 300) return 'medium';
+  return 'low';
+}
+
+export function getForecast(state: AppState): number {
+  const daily = getDailyAllowance(state);
+  return Math.round(getRemainingBalance(state) - (daily * getRemainingDays(state) * 0.8));
+}
+
+export function getSnapshot(state: AppState): FinancialSnapshot {
+  return {
+    remainingBalance: getRemainingBalance(state),
+    dailyAllowance: Math.round(getDailyAllowance(state)),
+    healthScore: getHealthScore(state),
+    riskLevel: getRiskLevel(state),
+    forecast: getForecast(state),
+  };
+}
+
+export const CATEGORY_EMOJIS: Record<string, string> = {
+  Food: '🍔',
+  Transport: '🚇',
+  Shopping: '🛍️',
+  Entertainment: '🎬',
+  Health: '🏥',
+  Bills: '📄',
+  Income: '💰',
+  Other: '📦',
+};
+
+export const UNEXPECTED_EVENTS = [
+  { description: 'Phone screen cracked 📱💔', amount: 1500 },
+  { description: 'Medical emergency 🏥', amount: 2000 },
+  { description: 'Laptop repair 💻🔧', amount: 2500 },
+  { description: 'Friend\\'s birthday gift 🎁', amount: 500 },
+  { description: 'Lost wallet cash 💸', amount: 1000 },
+];`,
+
+  'src/store.tsx': `import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
+import { AppState, AppAction } from './types';
+
+const initialState: AppState = {
+  budget: 10000,
+  currentDay: 8,
+  transactions: [
+    { id: '1', amount: 10000, category: 'Income', description: 'Monthly allowance 💰', day: 1, type: 'income' },
+    { id: '2', amount: 350, category: 'Food', description: 'Groceries 🛒', day: 2, type: 'expense' },
+    { id: '3', amount: 120, category: 'Transport', description: 'Metro recharge 🚇', day: 3, type: 'expense' },
+    { id: '4', amount: 500, category: 'Food', description: 'Zomato orders 🍔', day: 5, type: 'expense' },
+    { id: '5', amount: 200, category: 'Entertainment', description: 'Movie night 🎬', day: 6, type: 'expense' },
+    { id: '6', amount: 800, category: 'Shopping', description: 'New t-shirt 👕', day: 7, type: 'expense' },
+  ],
+  commitments: [
+    { id: 'c1', name: 'Room Rent', amount: 3000, dueDay: 1, paid: true, emoji: '🏠' },
+    { id: 'c2', name: 'Phone Bill', amount: 500, dueDay: 15, paid: false, emoji: '📱' },
+    { id: 'c3', name: 'WiFi Bill', amount: 300, dueDay: 20, paid: false, emoji: '📶' },
+  ],
+  subscriptions: [
+    { id: 's1', name: 'Netflix', amount: 199, emoji: '🎬', active: true },
+    { id: 's2', name: 'Spotify', amount: 119, emoji: '🎵', active: true },
+    { id: 's3', name: 'YouTube Premium', amount: 129, emoji: '▶️', active: false },
+  ],
+  savingsGoals: [
+    { id: 'g1', name: 'Emergency Fund', target: 2000, saved: 500, emoji: '🆘' },
+    { id: 'g2', name: 'New Earbuds', target: 1500, saved: 300, emoji: '🎧' },
+  ],
+};
+
+function reducer(state: AppState, action: AppAction): AppState {
+  switch (action.type) {
+    case 'ADD_TRANSACTION':
+      return { ...state, transactions: [...state.transactions, action.payload] };
+    case 'DELETE_TRANSACTION':
+      return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) };
+    case 'ADD_GOAL':
+      return { ...state, savingsGoals: [...state.savingsGoals, action.payload] };
+    case 'UPDATE_GOAL_SAVED':
+      return {
+        ...state,
+        savingsGoals: state.savingsGoals.map(g =>
+          g.id === action.payload.id ? { ...g, saved: Math.min(g.target, g.saved + action.payload.amount) } : g
+        ),
+      };
+    case 'SET_DAY':
+      return { ...state, currentDay: action.payload };
+    case 'RESET':
+      return initialState;
+    default:
+      return state;
+  }
+}
+
+const FinanceContext = createContext<{ state: AppState; dispatch: React.Dispatch<AppAction> } | null>(null);
+
+export function FinanceProvider({ children }: { children: ReactNode }) {
+  const [state, dispatch] = useReducer(reducer, initialState, (init) => {
+    try {
+      const saved = localStorage.getItem('broke-state');
+      return saved ? JSON.parse(saved) : init;
+    } catch {
+      return init;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('broke-state', JSON.stringify(state));
+  }, [state]);
+
+  return <FinanceContext.Provider value={{ state, dispatch }}>{children}</FinanceContext.Provider>;
+}
+
+export function useFinance() {
+  const ctx = useContext(FinanceContext);
+  if (!ctx) throw new Error('useFinance must be inside FinanceProvider');
+  return ctx;
+}`,
+
+  'src/components/Dashboard.tsx': `import React, { useState } from 'react';
+import { useFinance } from '../store';
+import { getRemainingBalance, getDailyAllowance, getHealthScore, getRiskLevel, getTotalExpenses, UNEXPECTED_EVENTS, CATEGORY_EMOJIS } from '../utils/finance';
+import { Wallet, TrendingDown, Zap, Calendar, Sparkles } from 'lucide-react';
+
+export function Dashboard() {
+  const { state, dispatch } = useFinance();
+  const [surprise, setSurprise] = useState<typeof UNEXPECTED_EVENTS[0] | null>(null);
+
+  const balance = getRemainingBalance(state);
+  const daily = Math.round(getDailyAllowance(state));
+  const health = getHealthScore(state);
+  const risk = getRiskLevel(state);
+
+  const handleRoll = () => {
+    const ev = UNEXPECTED_EVENTS[Math.floor(Math.random() * UNEXPECTED_EVENTS.length)];
+    setSurprise(ev);
+  };
+
+  const handleAcceptSurprise = () => {
+    if (!surprise) return;
+    dispatch({
+      type: 'ADD_TRANSACTION',
+      payload: {
+        id: 'surprise-' + Date.now(),
+        amount: surprise.amount,
+        category: 'Other',
+        description: surprise.description,
+        day: state.currentDay,
+        type: 'expense',
+      },
+    });
+    setSurprise(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Hero Card */}
+      <section className="glass rounded-2xl p-5 gradient-bg relative overflow-hidden" aria-label="Remaining Balance">
+        <p className="text-sm text-white/80 font-medium">Remaining Balance</p>
+        <p className="text-4xl font-extrabold mt-1">₹{balance.toLocaleString()}</p>
+        <div className="flex gap-4 mt-3 text-xs text-white/90">
+          <span className="flex items-center gap-1"><TrendingDown size={14} /> Spent: ₹{getTotalExpenses(state)}</span>
+          <span className="flex items-center gap-1"><Calendar size={14} /> Day {state.currentDay}/30</span>
+        </div>
+      </section>
+
+      {/* Stats Grid */}
+      <section className="grid grid-cols-2 gap-3" aria-label="Key metrics">
+        <div className="glass rounded-xl p-4">
+          <div className="flex items-center gap-1.5 text-zinc-400 text-xs mb-1">
+            <Wallet size={14} /> Daily Budget
+          </div>
+          <p className="text-xl font-bold text-emerald-400">₹{daily}</p>
+          <p className="text-[10px] text-zinc-500">per day left</p>
+        </div>
+        <div className="glass rounded-xl p-4">
+          <div className="flex items-center gap-1.5 text-zinc-400 text-xs mb-1">
+            <Zap size={14} /> Health Score
+          </div>
+          <p className="text-xl font-bold text-violet-400">{health}/100</p>
+          <p className="text-[10px] text-zinc-500">Risk: {risk.toUpperCase()}</p>
+        </div>
+      </section>
+
+      {/* Unexpected Life Event Button */}
+      <section className="glass rounded-xl p-4 border border-pink-500/20" aria-label="Random Events">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-pink-400 flex items-center gap-1.5">
+              <Sparkles size={16} /> Life Happens
+            </h2>
+            <p className="text-xs text-zinc-400">Simulate unexpected emergencies</p>
+          </div>
+          <button onClick={handleRoll} className="gradient-bg px-3.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer">
+            Roll 🎲
+          </button>
+        </div>
+        {surprise && (
+          <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+            <p className="text-xs font-semibold text-red-300">{surprise.description}</p>
+            <p className="text-sm font-bold text-red-400 mt-0.5">-₹{surprise.amount}</p>
+            <div className="flex gap-2 mt-2">
+              <button onClick={handleAcceptSurprise} className="flex-1 bg-red-500/30 text-red-200 py-1 rounded text-xs">Accept 😭</button>
+              <button onClick={() => setSurprise(null)} className="flex-1 bg-zinc-800 text-zinc-400 py-1 rounded text-xs">Pass</button>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Recent Activity */}
+      <section className="glass rounded-xl p-4" aria-label="Recent activity">
+        <h2 className="text-sm font-bold text-zinc-300 mb-3">Recent Spending</h2>
+        <div className="space-y-2">
+          {state.transactions.slice(-4).reverse().map(t => (
+            <div key={t.id} className="flex justify-between items-center text-xs py-1 border-b border-zinc-800/50 pb-2">
+              <div className="flex items-center gap-2">
+                <span>{CATEGORY_EMOJIS[t.category] || '📦'}</span>
+                <span>{t.description}</span>
+              </div>
+              <span className={t.type === 'income' ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                {t.type === 'income' ? '+' : '-'}₹{t.amount}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}`,
+
+  'src/components/Transactions.tsx': `import React, { useState } from 'react';
+import { useFinance } from '../store';
+import { CATEGORY_EMOJIS } from '../utils/finance';
+import { sanitizeInput, sanitizeAmount } from '../utils/sanitize';
+import { Plus, Trash2 } from 'lucide-react';
+
+export function Transactions() {
+  const { state, dispatch } = useFinance();
+  const [desc, setDesc] = useState('');
+  const [amt, setAmt] = useState('');
+  const [cat, setCat] = useState('Food');
+  const [type, setType] = useState<'expense' | 'income'>('expense');
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanAmt = sanitizeAmount(amt);
+    const cleanDesc = sanitizeInput(desc);
+    if (!cleanAmt || !cleanDesc) return;
+
+    dispatch({
+      type: 'ADD_TRANSACTION',
+      payload: {
+        id: 'txn-' + Date.now(),
+        amount: cleanAmt,
+        category: cat,
+        description: cleanDesc,
+        day: state.currentDay,
+        type,
+      },
+    });
+    setDesc('');
+    setAmt('');
+  };
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-bold text-zinc-200">Manage Expenses 💳</h2>
+      <form onSubmit={handleAdd} className="glass rounded-xl p-4 space-y-3">
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setType('expense')} className={\`flex-1 py-1.5 rounded-lg text-xs font-semibold \${type === 'expense' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-zinc-800 text-zinc-400'}\`}>Expense</button>
+          <button type="button" onClick={() => setType('income')} className={\`flex-1 py-1.5 rounded-lg text-xs font-semibold \${type === 'income' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-zinc-800 text-zinc-400'}\`}>Income</button>
+        </div>
+        <input type="number" placeholder="Amount (₹)" value={amt} onChange={e => setAmt(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 text-sm" required min="1" />
+        <input type="text" placeholder="Description" value={desc} onChange={e => setDesc(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 text-sm" required />
+        <select value={cat} onChange={e => setCat(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 text-sm">
+          {Object.keys(CATEGORY_EMOJIS).map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <button type="submit" className="w-full gradient-bg py-2.5 rounded-xl font-bold text-sm cursor-pointer">Add Record</button>
+      </form>
+
+      <div className="space-y-2">
+        {state.transactions.map(t => (
+          <div key={t.id} className="glass rounded-xl p-3 flex justify-between items-center text-sm">
+            <div className="flex items-center gap-2">
+              <span>{CATEGORY_EMOJIS[t.category] || '📦'}</span>
+              <div>
+                <p className="font-semibold">{t.description}</p>
+                <p className="text-[10px] text-zinc-500">Day {t.day} · {t.category}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={t.type === 'income' ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                {t.type === 'income' ? '+' : '-'}₹{t.amount}
+              </span>
+              <button onClick={() => dispatch({ type: 'DELETE_TRANSACTION', payload: t.id })} className="text-zinc-600 hover:text-red-400">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}`,
+
+  'src/components/Simulator.tsx': `import React, { useState } from 'react';
+import { useFinance } from '../store';
+import { getSnapshot } from '../utils/finance';
+import { sanitizeAmount, sanitizeInput } from '../utils/sanitize';
+import { FlaskConical, ArrowRight } from 'lucide-react';
+
+export function Simulator() {
+  const { state, dispatch } = useFinance();
+  const [desc, setDesc] = useState('');
+  const [amt, setAmt] = useState('');
+  const [simulated, setSimulated] = useState<{ before: any; after: any } | null>(null);
+
+  const handleSimulate = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = sanitizeAmount(amt);
+    if (!val) return;
+
+    const before = getSnapshot(state);
+    const mockState = {
+      ...state,
+      transactions: [...state.transactions, { id: 'sim', amount: val, category: 'Other', description: desc, day: state.currentDay, type: 'expense' as const }]
+    };
+    const after = getSnapshot(mockState);
+    setSimulated({ before, after });
+  };
+
+  const handleCommit = () => {
+    if (!simulated) return;
+    dispatch({
+      type: 'ADD_TRANSACTION',
+      payload: {
+        id: 'real-' + Date.now(),
+        amount: sanitizeAmount(amt),
+        category: 'Other',
+        description: sanitizeInput(desc),
+        day: state.currentDay,
+        type: 'expense'
+      }
+    });
+    setSimulated(null);
+    setAmt('');
+    setDesc('');
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-bold text-zinc-200 flex items-center gap-2">
+          <FlaskConical className="text-violet-400" /> Decision Sandbox 🔮
+        </h2>
+        <p className="text-xs text-zinc-400">Test spending decisions before you spend!</p>
+      </div>
+
+      <form onSubmit={handleSimulate} className="glass rounded-xl p-4 space-y-3">
+        <input type="number" placeholder="Simulate spending ₹..." value={amt} onChange={e => setAmt(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 text-sm" required min="1" />
+        <input type="text" placeholder="What's this for? (e.g., New Jacket)" value={desc} onChange={e => setDesc(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2.5 text-sm" required />
+        <button type="submit" className="w-full gradient-bg py-2.5 rounded-xl font-bold text-sm cursor-pointer">Simulate Consequence ⚡</button>
+      </form>
+
+      {simulated && (
+        <div className="glass rounded-xl p-4 border border-violet-500/30 space-y-3">
+          <h3 className="text-xs font-bold text-violet-300 uppercase">Simulated Impact</h3>
+          <div className="space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-zinc-400">Remaining Balance:</span>
+              <span className="font-bold text-white">₹{simulated.before.remainingBalance} <ArrowRight size={10} className="inline mx-1"/> <span className="text-red-400">₹{simulated.after.remainingBalance}</span></span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-400">Daily Allowance:</span>
+              <span className="font-bold text-white">₹{simulated.before.dailyAllowance} <ArrowRight size={10} className="inline mx-1"/> <span className="text-red-400">₹{simulated.after.dailyAllowance}</span></span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-400">Health Score:</span>
+              <span className="font-bold text-white">{simulated.before.healthScore} <ArrowRight size={10} className="inline mx-1"/> <span className="text-amber-400">{simulated.after.healthScore}</span></span>
+            </div>
+          </div>
+          <div className="flex gap-2 pt-2">
+            <button onClick={handleCommit} className="flex-1 gradient-bg py-2 rounded-lg font-bold text-xs cursor-pointer">Make It Real 💸</button>
+            <button onClick={() => setSimulated(null)} className="flex-1 bg-zinc-800 text-zinc-400 py-2 rounded-lg text-xs">Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}`,
+
+  'src/components/Goals.tsx': `import React, { useState } from 'react';
+import { useFinance } from '../store';
+import { sanitizeAmount, sanitizeInput } from '../utils/sanitize';
+import { Target, Plus } from 'lucide-react';
+
+export function Goals() {
+  const { state, dispatch } = useFinance();
+  const [name, setName] = useState('');
+  const [target, setTarget] = useState('');
+
+  const handleAddGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanAmt = sanitizeAmount(target);
+    const cleanName = sanitizeInput(name);
+    if (!cleanAmt || !cleanName) return;
+
+    dispatch({
+      type: 'ADD_GOAL',
+      payload: { id: 'g-' + Date.now(), name: cleanName, target: cleanAmt, saved: 0, emoji: '🎯' }
+    });
+    setName('');
+    setTarget('');
+  };
+
+  const handleSave = (id: string) => {
+    dispatch({ type: 'UPDATE_GOAL_SAVED', payload: { id, amount: 200 } });
+  };
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-bold text-zinc-200 flex items-center gap-2">
+        <Target className="text-violet-400" /> Savings Goals 🎯
+      </h2>
+      <form onSubmit={handleAddGoal} className="glass rounded-xl p-4 space-y-3">
+        <input type="text" placeholder="Goal name (e.g., Concert Ticket)" value={name} onChange={e => setName(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-sm" required />
+        <input type="number" placeholder="Target ₹" value={target} onChange={e => setTarget(e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-lg p-2 text-sm" required min="1" />
+        <button type="submit" className="w-full gradient-bg py-2 rounded-lg text-xs font-bold">Create Goal ✨</button>
+      </form>
+
+      <div className="space-y-3">
+        {state.savingsGoals.map(g => {
+          const pct = Math.min(100, Math.round((g.saved / g.target) * 100));
+          return (
+            <div key={g.id} className="glass rounded-xl p-4 space-y-2">
+              <div className="flex justify-between text-sm font-bold">
+                <span>{g.emoji} {g.name}</span>
+                <span className="text-violet-400">{pct}%</span>
+              </div>
+              <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                <div className="h-full gradient-bg rounded-full" style={{ width: \`\${pct}%\` }} />
+              </div>
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-[10px] text-zinc-500">₹{g.saved} / ₹{g.target}</span>
+                {pct < 100 && (
+                  <button onClick={() => handleSave(g.id)} className="bg-zinc-800 hover:bg-zinc-700 text-xs px-2.5 py-1 rounded-md text-zinc-200">
+                    + Add ₹200
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}`,
+
+  'src/components/Health.tsx': `import React from 'react';
+import { useFinance } from '../store';
+import { getHealthScore, getRiskLevel, getDailyAllowance, getForecast, getRemainingBalance } from '../utils/finance';
+import { ShieldCheck, AlertCircle } from 'lucide-react';
+
+export function Health() {
+  const { state } = useFinance();
+  const health = getHealthScore(state);
+  const risk = getRiskLevel(state);
+  const daily = Math.round(getDailyAllowance(state));
+  const forecast = getForecast(state);
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-lg font-bold text-zinc-200 flex items-center gap-2">
+        <ShieldCheck className="text-emerald-400" /> Financial Health Audit
+      </h2>
+      <div className="glass rounded-2xl p-6 text-center space-y-2">
+        <div className="text-5xl font-black gradient-text">{health}/100</div>
+        <p className="text-xs text-zinc-400 font-semibold uppercase">Risk Status: <span className="text-emerald-400">{risk}</span></p>
+      </div>
+
+      <div className="glass rounded-xl p-4 space-y-2 text-xs">
+        <h3 className="font-bold text-zinc-300">Insights & Survival Guide</h3>
+        <p className="text-zinc-400">💡 At your current pace, you can safely spend <strong>₹{daily}/day</strong> until Day 30.</p>
+        <p className="text-zinc-400">📈 End of Month projected remaining: <strong className={forecast > 0 ? "text-emerald-400" : "text-red-400"}>₹{forecast}</strong>.</p>
+      </div>
+    </div>
+  );
+}`,
+
+  'src/App.tsx': `import React, { useState } from 'react';
+import { FinanceProvider } from './store';
+import { Dashboard } from './components/Dashboard';
+import { Transactions } from './components/Transactions';
+import { Simulator } from './components/Simulator';
+import { Goals } from './components/Goals';
+import { Health } from './components/Health';
+import { LayoutDashboard, ArrowLeftRight, FlaskConical, Target, ShieldCheck } from 'lucide-react';
+
+export default function App() {
+  const [tab, setTab] = useState<'dashboard' | 'transactions' | 'simulator' | 'goals' | 'health'>('dashboard');
+
+  return (
+    <FinanceProvider>
+      <div className="min-h-screen bg-zinc-950 text-white pb-20">
+        <header className="sticky top-0 z-40 glass border-b border-zinc-800/80 px-4 py-3">
+          <div className="max-w-md mx-auto flex justify-between items-center">
+            <h1 className="text-base font-bold gradient-text">Broke But Functional</h1>
+            <span className="text-xs bg-zinc-800 px-2 py-1 rounded-full text-zinc-400">Gen Z Budget</span>
+          </div>
+        </header>
+
+        <main className="max-w-md mx-auto px-4 py-4">
+          {tab === 'dashboard' && <Dashboard />}
+          {tab === 'transactions' && <Transactions />}
+          {tab === 'simulator' && <Simulator />}
+          {tab === 'goals' && <Goals />}
+          {tab === 'health' && <Health />}
+        </main>
+
+        <nav className="fixed bottom-0 left-0 right-0 glass border-t border-zinc-800/80 py-2 z-50">
+          <div className="max-w-md mx-auto flex justify-around">
+            <button onClick={() => setTab('dashboard')} className={\`flex flex-col items-center gap-0.5 \${tab === 'dashboard' ? 'text-violet-400' : 'text-zinc-500'}\`}>
+              <LayoutDashboard size={18} />
+              <span className="text-[10px]">Home</span>
+            </button>
+            <button onClick={() => setTab('transactions')} className={\`flex flex-col items-center gap-0.5 \${tab === 'transactions' ? 'text-violet-400' : 'text-zinc-500'}\`}>
+              <ArrowLeftRight size={18} />
+              <span className="text-[10px]">Spend</span>
+            </button>
+            <button onClick={() => setTab('simulator')} className={\`flex flex-col items-center gap-0.5 \${tab === 'simulator' ? 'text-violet-400' : 'text-zinc-500'}\`}>
+              <FlaskConical size={18} />
+              <span className="text-[10px]">Sandbox</span>
+            </button>
+            <button onClick={() => setTab('goals')} className={\`flex flex-col items-center gap-0.5 \${tab === 'goals' ? 'text-violet-400' : 'text-zinc-500'}\`}>
+              <Target size={18} />
+              <span className="text-[10px]">Goals</span>
+            </button>
+            <button onClick={() => setTab('health')} className={\`flex flex-col items-center gap-0.5 \${tab === 'health' ? 'text-violet-400' : 'text-zinc-500'}\`}>
+              <ShieldCheck size={18} />
+              <span className="text-[10px]">Health</span>
+            </button>
+          </div>
+        </nav>
+      </div>
+    </FinanceProvider>
+  );
+}`
+};
+
+// Write files recursively
+Object.entries(files).forEach(([filePath, content]) => {
+  const fullPath = path.join(__dirname, filePath);
+  fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+  fs.writeFileSync(fullPath, content, 'utf8');
+  console.log(' Created:', filePath);
+});
+
+console.log('\\n All files generated successfully!');
