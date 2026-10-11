@@ -1,3 +1,5 @@
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
 export interface Transaction {
   id: string;
   amount: number;
@@ -36,7 +38,7 @@ export interface FinancialSnapshot {
   remainingBalance: number;
   dailyAllowance: number;
   healthScore: number;
-  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+  riskLevel: RiskLevel;
   forecast: number;
 }
 
@@ -52,11 +54,9 @@ export interface AppState {
 export type AppAction =
   | { type: 'ADD_TRANSACTION'; payload: Transaction }
   | { type: 'DELETE_TRANSACTION'; payload: string }
-  | { type: 'ADD_COMMITMENT'; payload: Commitment }
-  | { type: 'TOGGLE_COMMITMENT_PAID'; payload: string }
-  | { type: 'ADD_SUBSCRIPTION'; payload: Subscription }
+  | { type: 'TOGGLE_COMMITMENT'; payload: string }
   | { type: 'TOGGLE_SUBSCRIPTION'; payload: string }
   | { type: 'ADD_GOAL'; payload: SavingsGoal }
-  | { type: 'UPDATE_GOAL_SAVED'; payload: { id: string; amount: number } }
+  | { type: 'ADD_TO_GOAL'; payload: { id: string; amount: number } }
   | { type: 'SET_DAY'; payload: number }
-  | { type: 'RESET' };
+  | { type: 'RESET_STATE' };

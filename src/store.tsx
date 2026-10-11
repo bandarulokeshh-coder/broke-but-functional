@@ -1,52 +1,68 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import { AppState, AppAction } from './types';
 
-const initialState: AppState = {
+const defaultState: AppState = {
   budget: 10000,
   currentDay: 8,
   transactions: [
-    { id: '1', amount: 10000, category: 'Income', description: 'Monthly allowance 💰', day: 1, type: 'income' },
-    { id: '2', amount: 350, category: 'Food', description: 'Groceries 🛒', day: 2, type: 'expense' },
-    { id: '3', amount: 120, category: 'Transport', description: 'Metro recharge 🚇', day: 3, type: 'expense' },
-    { id: '4', amount: 500, category: 'Food', description: 'Zomato orders 🍔', day: 5, type: 'expense' },
-    { id: '5', amount: 200, category: 'Entertainment', description: 'Movie night 🎬', day: 6, type: 'expense' },
-    { id: '6', amount: 800, category: 'Shopping', description: 'New t-shirt 👕', day: 7, type: 'expense' },
+    { id: '1', amount: 10000, category: 'Income', description: 'Monthly stipend / allowance 💰', day: 1, type: 'income' },
+    { id: '2', amount: 450, category: 'Food', description: 'Grocery run 🛒', day: 2, type: 'expense' },
+    { id: '3', amount: 150, category: 'Transport', description: 'Metro card topup 🚇', day: 3, type: 'expense' },
+    { id: '4', amount: 620, category: 'Food', description: 'Weekend burger order 🍔', day: 5, type: 'expense' },
+    { id: '5', amount: 300, category: 'Entertainment', description: 'Cinema ticket 🎬', day: 6, type: 'expense' },
+    { id: '6', amount: 899, category: 'Shopping', description: 'New sneakers sale 👟', day: 7, type: 'expense' },
   ],
   commitments: [
-    { id: 'c1', name: 'Room Rent', amount: 3000, dueDay: 1, paid: true, emoji: '🏠' },
-    { id: 'c2', name: 'Phone Bill', amount: 500, dueDay: 15, paid: false, emoji: '📱' },
-    { id: 'c3', name: 'WiFi Bill', amount: 300, dueDay: 20, paid: false, emoji: '📶' },
+    { id: 'c1', name: 'Shared PG Rent', amount: 3200, dueDay: 1, paid: true, emoji: '🏠' },
+    { id: 'c2', name: 'Mobile Recharge', amount: 499, dueDay: 15, paid: false, emoji: '📱' },
+    { id: 'c3', name: 'PG WiFi Share', amount: 250, dueDay: 22, paid: false, emoji: '📶' },
   ],
   subscriptions: [
-    { id: 's1', name: 'Netflix', amount: 199, emoji: '🎬', active: true },
-    { id: 's2', name: 'Spotify', amount: 119, emoji: '🎵', active: true },
+    { id: 's1', name: 'Spotify Student', amount: 59, emoji: '🎵', active: true },
+    { id: 's2', name: 'Netflix Share', amount: 199, emoji: '🎬', active: true },
     { id: 's3', name: 'YouTube Premium', amount: 129, emoji: '▶️', active: false },
   ],
   savingsGoals: [
-    { id: 'g1', name: 'Emergency Fund', target: 2000, saved: 500, emoji: '🆘' },
-    { id: 'g2', name: 'New Earbuds', target: 1500, saved: 300, emoji: '🎧' },
+    { id: 'g1', name: 'Emergency Buffer', target: 2000, saved: 600, emoji: '🆘' },
+    { id: 'g2', name: 'Noise-Canceling Buds', target: 1800, saved: 400, emoji: '🎧' },
   ],
 };
 
-function reducer(state: AppState, action: AppAction): AppState {
+function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'ADD_TRANSACTION':
-      return { ...state, transactions: [...state.transactions, action.payload] };
+      return { ...state, transactions: [action.payload, ...state.transactions] };
     case 'DELETE_TRANSACTION':
-      return { ...state, transactions: state.transactions.filter(t => t.id !== action.payload) };
-    case 'ADD_GOAL':
-      return { ...state, savingsGoals: [...state.savingsGoals, action.payload] };
-    case 'UPDATE_GOAL_SAVED':
+      return { ...state, transactions: state.transactions.filter((t) => t.id !== action.payload) };
+    case 'TOGGLE_COMMITMENT':
       return {
         ...state,
-        savingsGoals: state.savingsGoals.map(g =>
-          g.id === action.payload.id ? { ...g, saved: Math.min(g.target, g.saved + action.payload.amount) } : g
+        commitments: state.commitments.map((c) =>
+          c.id === action.payload ? { ...c, paid: !c.paid } : c
+        ),
+      };
+    case 'TOGGLE_SUBSCRIPTION':
+      return {
+        ...state,
+        subscriptions: state.subscriptions.map((s) =>
+          s.id === action.payload ? { ...s, active: !s.active } : s
+        ),
+      };
+    case 'ADD_GOAL':
+      return { ...state, savingsGoals: [...state.savingsGoals, action.payload] };
+    case 'ADD_TO_GOAL':
+      return {
+        ...state,
+        savingsGoals: state.savingsGoals.map((g) =>
+          g.id === action.payload.id
+            ? { ...g, saved: Math.min(g.target, g.saved + action.payload.amount) }
+            : g
         ),
       };
     case 'SET_DAY':
-      return { ...state, currentDay: action.payload };
-    case 'RESET':
-      return initialState;
+      return { ...state, currentDay: Math.max(1, Math.min(30, action.payload)) };
+    case 'RESET_STATE':
+      return defaultState;
     default:
       return state;
   }
@@ -55,9 +71,9 @@ function reducer(state: AppState, action: AppAction): AppState {
 const FinanceContext = createContext<{ state: AppState; dispatch: React.Dispatch<AppAction> } | null>(null);
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState, (init) => {
+  const [state, dispatch] = useReducer(appReducer, defaultState, (init) => {
     try {
-      const saved = localStorage.getItem('broke-state');
+      const saved = localStorage.getItem('broke-functional-state-v1');
       return saved ? JSON.parse(saved) : init;
     } catch {
       return init;
@@ -65,7 +81,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    localStorage.setItem('broke-state', JSON.stringify(state));
+    localStorage.setItem('broke-functional-state-v1', JSON.stringify(state));
   }, [state]);
 
   return <FinanceContext.Provider value={{ state, dispatch }}>{children}</FinanceContext.Provider>;
@@ -73,6 +89,6 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
 export function useFinance() {
   const ctx = useContext(FinanceContext);
-  if (!ctx) throw new Error('useFinance must be inside FinanceProvider');
+  if (!ctx) throw new Error('useFinance must be used within FinanceProvider');
   return ctx;
 }
